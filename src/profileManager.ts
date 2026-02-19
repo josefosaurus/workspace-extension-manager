@@ -26,13 +26,20 @@ export class ProfileManager {
             // First, try to install missing extensions
             await this.installMissingExtensions(config.extensions);
 
+            // Disable non-profile extensions if configured
+            const extConfig = vscode.workspace.getConfiguration('workspace-extension-manager');
+            const shouldDisable = extConfig.get<boolean>('disableOtherExtensions', true);
+            if (shouldDisable) {
+                await this.disableNonProfileExtensions(config.extensions);
+            }
+
             // Apply settings if provided
             if (config.settings) {
                 await this.applySettings(config.settings);
             }
 
             vscode.window.showInformationMessage(
-                `Profile "${config.name}" applied successfully. Some extensions may require reload.`
+                `Profile "${config.name}" applied. Non-profile extensions disabled globally. Reload to activate changes.`
             );
 
             return true;
@@ -41,6 +48,33 @@ export class ProfileManager {
                 `Failed to apply profile: ${error instanceof Error ? error.message : 'Unknown error'}`
             );
             return false;
+        }
+    }
+
+    private async disableNonProfileExtensions(profileExtensions: string[]): Promise<void> {
+        const profileSet = new Set(profileExtensions.map(id => id.toLowerCase()));
+        const vscodePath = path.join(os.homedir(), '.vscode', 'extensions');
+
+        const toDisable = vscode.extensions.all.filter(ext => {
+            // Keep extensions that are part of the profile
+            if (profileSet.has(ext.id.toLowerCase())) {
+                return false;
+            }
+            // Keep this extension itself
+            if (ext.id.toLowerCase().includes('workspace-extension-manager')) {
+                return false;
+            }
+            // Keep built-in extensions (not installed in ~/.vscode/extensions)
+            if (!ext.extensionPath.startsWith(vscodePath)) {
+                return false;
+            }
+            return true;
+        });
+
+        console.log(`🚫 Disabling ${toDisable.length} non-profile extensions...`);
+        for (const ext of toDisable) {
+            console.log(`  ⊘ Disabling ${ext.id}`);
+            await vscode.commands.executeCommand('workbench.extensions.disableExtension', ext.id);
         }
     }
 

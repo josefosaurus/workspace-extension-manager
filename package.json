@@ -37,6 +37,11 @@
           "default": true,
           "description": "Automatically detect project type and prompt to apply profile on workspace startup"
         },
+        "workspace-extension-manager.disableOtherExtensions": {
+          "type": "boolean",
+          "default": true,
+          "description": "When applying a profile, disable all other user-installed extensions globally. Note: this uses a global disable (not workspace-scoped) due to VS Code API limitations. Reload the window to apply changes."
+        },
         "workspace-extension-manager.excludedFolders": {
           "type": "array",
           "items": {

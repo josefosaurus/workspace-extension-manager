@@ -66,11 +66,13 @@ Scoring: `matchCount × priority` (all priorities currently 1). Ties go to first
 ## Configuration
 
 - **`workspace-extension-manager.autoDetect`** (boolean, default: `true`) — Enable/disable startup detection per workspace.
+- **`workspace-extension-manager.disableOtherExtensions`** (boolean, default: `true`) — When applying a profile, disable all user-installed extensions not in the profile. **Disable is global (not workspace-scoped)** due to VS Code API limitations — there is no public API for workspace-scoped programmatic disabling. Reload is required to apply.
 - **`workspace-extension-manager.excludedFolders`** (string[], default: `node_modules`, `.git`, `build`, `dist`, `venv`, etc.) — Folders excluded from root-level scanning. **If any folders are configured, the entire default list is replaced.**
 
 ## VSCode API Constraints
 
 - No programmatic API to create/switch named profiles — the extension works around this by directly installing extensions and applying workspace settings.
+- `workbench.extensions.disableExtension` operates **globally**, not per-workspace. This is the standard pattern used by community profile-switcher extensions. The notification message communicates this to the user.
 - Profile export format (`.code-profile`) is supported via `generateCodeProfileContent()` / `exportProfile()` but these are not used in the current activation flow.
 - Platform-specific profile storage paths:
   - macOS: `~/Library/Application Support/Code/User/profiles/`
