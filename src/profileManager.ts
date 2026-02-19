@@ -1,8 +1,15 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as https from 'https';
 import * as path from 'path';
 import * as os from 'os';
 import { ProfileConfig, generateCodeProfileContent } from './profiles';
+
+interface MarketplaceExtensionInfo {
+    deprecated: boolean;
+    notFound: boolean;
+    replacement?: string;
+}
 
 export class ProfileManager {
     private getProfilesDirectory(): string {
@@ -26,11 +33,15 @@ export class ProfileManager {
             // First, try to install missing extensions
             await this.installMissingExtensions(config.extensions);
 
-            // Disable non-profile extensions if configured
+            // Disable non-profile extensions if configured (non-fatal)
             const extConfig = vscode.workspace.getConfiguration('workspace-extension-manager');
             const shouldDisable = extConfig.get<boolean>('disableOtherExtensions', true);
             if (shouldDisable) {
-                await this.disableNonProfileExtensions(config.extensions);
+                try {
+                    await this.disableNonProfileExtensions(config.extensions);
+                } catch (e) {
+                    console.warn('⚠️ disableNonProfileExtensions failed:', e);
+                }
             }
 
             // Apply settings if provided
@@ -68,13 +79,60 @@ export class ProfileManager {
             if (!ext.extensionPath.startsWith(vscodePath)) {
                 return false;
             }
+
+            const pkg = ext.packageJSON as any;
+            const contributes = pkg?.contributes ?? {};
+            const categories: string[] = pkg?.categories ?? [];
+
+            // Keep theme extensions (color themes, icon themes, product icon themes)
+            if (
+                (contributes.themes?.length ?? 0) > 0 ||
+                (contributes.iconThemes?.length ?? 0) > 0 ||
+                (contributes.productIconThemes?.length ?? 0) > 0 ||
+                categories.includes('Themes')
+            ) {
+                return false;
+            }
+
+            // Keep AI / ML extensions
+            if (categories.some((c: string) => ['AI', 'Machine Learning', 'Data Science'].includes(c))) {
+                return false;
+            }
+
             return true;
         });
 
         console.log(`🚫 Disabling ${toDisable.length} non-profile extensions...`);
+        let disableCommandId: string | null = null;
+
+        // Discover which disable command VS Code has registered in this version
+        const candidates = [
+            'workbench.extensions.disableExtension',
+            'workbench.extensions.action.disableExtension',
+        ];
+        const available = await vscode.commands.getCommands(true);
+        for (const cmd of candidates) {
+            if (available.includes(cmd)) {
+                disableCommandId = cmd;
+                break;
+            }
+        }
+
+        if (!disableCommandId) {
+            console.warn('⚠️ No extension-disable command found in this VS Code version. Skipping disable step.');
+            vscode.window.showWarningMessage(
+                'Could not disable non-profile extensions: VS Code does not expose a disable command in this version.'
+            );
+            return;
+        }
+
         for (const ext of toDisable) {
-            console.log(`  ⊘ Disabling ${ext.id}`);
-            await vscode.commands.executeCommand('workbench.extensions.disableExtension', ext.id);
+            try {
+                console.log(`  ⊘ Disabling ${ext.id}`);
+                await vscode.commands.executeCommand(disableCommandId, ext.id);
+            } catch (e) {
+                console.warn(`  ⚠️ Could not disable ${ext.id}:`, e);
+            }
         }
     }
 
@@ -99,9 +157,34 @@ export class ProfileManager {
             return;
         }
 
-        console.log(`📦 Installing ${missing.length} missing extensions...`);
+        console.log(`🔍 Checking marketplace for ${missing.length} extensions...`);
+        const marketplaceInfo = await this.checkExtensionsDeprecation(missing);
 
+        const toInstall: string[] = [];
         for (const extId of missing) {
+            const info = marketplaceInfo.get(extId.toLowerCase());
+            if (info?.notFound) {
+                console.warn(`⚠️ Extension not found on marketplace, skipping: ${extId}`);
+                vscode.window.showWarningMessage(`Extension "${extId}" was not found on the marketplace and will be skipped.`);
+            } else if (info?.deprecated) {
+                const msg = info.replacement
+                    ? `Extension "${extId}" is deprecated. Consider using "${info.replacement}" instead.`
+                    : `Extension "${extId}" is deprecated and will be skipped.`;
+                console.warn(`⚠️ ${msg}`);
+                vscode.window.showWarningMessage(msg);
+            } else {
+                toInstall.push(extId);
+            }
+        }
+
+        if (toInstall.length === 0) {
+            console.log('⚠️ No extensions to install after deprecation check');
+            return;
+        }
+
+        console.log(`📦 Installing ${toInstall.length} missing extensions...`);
+
+        for (const extId of toInstall) {
             try {
                 console.log(`⏬ Installing ${extId}...`);
                 await vscode.commands.executeCommand('workbench.extensions.installExtension', extId);
@@ -110,6 +193,86 @@ export class ProfileManager {
                 console.warn(`❌ Could not install extension ${extId}:`, error);
             }
         }
+    }
+
+    private checkExtensionsDeprecation(extensionIds: string[]): Promise<Map<string, MarketplaceExtensionInfo>> {
+        const result = new Map<string, MarketplaceExtensionInfo>();
+        for (const id of extensionIds) {
+            result.set(id.toLowerCase(), { deprecated: false, notFound: false });
+        }
+
+        return new Promise((resolve) => {
+            const body = JSON.stringify({
+                filters: [{
+                    criteria: extensionIds.map(id => ({ filterType: 7, value: id }))
+                }],
+                // IncludeVersions (0x1) | IncludeVersionProperties (0x10) | IncludeLatestVersionOnly (0x200)
+                flags: 0x211
+            });
+
+            const options: https.RequestOptions = {
+                hostname: 'marketplace.visualstudio.com',
+                path: '/_apis/public/gallery/extensionquery',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json;api-version=7.1-preview.1',
+                    'Content-Length': Buffer.byteLength(body)
+                }
+            };
+
+            const req = https.request(options, (res) => {
+                let data = '';
+                res.on('data', (chunk: string) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(data);
+                        const extensions: any[] = parsed.results?.[0]?.extensions ?? [];
+                        const foundIds = new Set<string>();
+
+                        for (const ext of extensions) {
+                            const id = `${ext.publisher.publisherName}.${ext.extensionName}`.toLowerCase();
+                            foundIds.add(id);
+
+                            const properties: any[] = ext.versions?.[0]?.properties ?? [];
+                            const deprecationProp = properties.find(
+                                (p: any) => p.key === 'Microsoft.VisualStudio.Code.Deprecation'
+                            );
+                            const alternateProp = properties.find(
+                                (p: any) => p.key === 'Microsoft.VisualStudio.Code.AlternateExtension'
+                            );
+
+                            if (deprecationProp) {
+                                result.set(id, { deprecated: true, notFound: false, replacement: alternateProp?.value });
+                            }
+                        }
+
+                        for (const id of extensionIds) {
+                            if (!foundIds.has(id.toLowerCase())) {
+                                result.set(id.toLowerCase(), { deprecated: false, notFound: true });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Failed to parse marketplace response:', e);
+                    }
+                    resolve(result);
+                });
+            });
+
+            req.setTimeout(5000, () => {
+                req.destroy();
+                console.warn('⚠️ Marketplace API timed out, skipping deprecation check');
+                resolve(result);
+            });
+
+            req.on('error', (e: Error) => {
+                console.warn('⚠️ Marketplace API request failed:', e.message);
+                resolve(result);
+            });
+
+            req.write(body);
+            req.end();
+        });
     }
 
     private async applySettings(settings: Record<string, any>): Promise<void> {
