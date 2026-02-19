@@ -1,0 +1,22 @@
+{
+  "name": "Python Development",
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "ms-python.pylint",
+    "ms-python.debugpy",
+    "njpwerner.autodocstring",
+    "kevinrose.vsc-python-indent"
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "python3",
+    "editor.formatOnSave": true,
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter",
+      "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+      }
+    }
+  }
+}

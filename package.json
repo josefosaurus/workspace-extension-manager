@@ -1,0 +1,82 @@
+{
+  "name": "workspace-extension-manager",
+  "displayName": "Workspace Extension Manager",
+  "description": "Auto-detects project type and applies VSCode profiles with recommended extensions",
+  "version": "0.1.0",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "workspace-extension-manager.detectAndApply",
+        "title": "Detect Project Type and Apply Profile"
+      },
+      {
+        "command": "workspace-extension-manager.switchProfile",
+        "title": "Switch Workspace Profile"
+      },
+      {
+        "command": "workspace-extension-manager.showCurrentProfile",
+        "title": "Show Current Profile"
+      }
+    ],
+    "configuration": {
+      "title": "Workspace Extension Manager",
+      "properties": {
+        "workspace-extension-manager.autoDetect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect project type and prompt to apply profile on workspace startup"
+        },
+        "workspace-extension-manager.excludedFolders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "node_modules",
+            ".git",
+            ".vscode",
+            "libraries",
+            "vendor",
+            "build",
+            "dist",
+            "out",
+            ".next",
+            ".nuxt",
+            "target",
+            "__pycache__",
+            ".pytest_cache",
+            "venv",
+            ".venv",
+            "env",
+            ".env"
+          ],
+          "description": "Folders to exclude from project type detection (e.g., libraries, vendor directories)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
+  }
+}

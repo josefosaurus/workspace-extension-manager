@@ -1,0 +1,16 @@
+{
+  "name": "Go Development",
+  "extensions": [
+    "golang.go"
+  ],
+  "settings": {
+    "go.useLanguageServer": true,
+    "go.toolsManagement.autoUpdate": true,
+    "editor.formatOnSave": true,
+    "[go]": {
+      "editor.defaultFormatter": "golang.go"
+    },
+    "go.lintOnSave": "package",
+    "go.vetOnSave": "package"
+  }
+}
