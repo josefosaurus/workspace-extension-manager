@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="extensions_switch-icon.svg" width="128" alt="Workspace Extension Manager">
+  <img src="icon.png" width="128" alt="Workspace Extension Manager">
 </p>
 
 # Workspace Extension Manager
