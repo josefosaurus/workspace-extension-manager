@@ -4,6 +4,7 @@
   "description": "Auto-detects project type and applies VSCode profiles with recommended extensions",
   "version": "0.1.0",
   "publisher": "your-publisher-name",
+  "icon": "extensions_switch-icon.svg",
   "engines": {
     "vscode": "^1.85.0"
   },

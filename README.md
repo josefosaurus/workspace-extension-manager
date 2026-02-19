@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="extensions_switch-icon.svg" width="128" alt="Workspace Extension Manager">
+</p>
+
 # Workspace Extension Manager
 
 A VSCode extension that automatically detects your project type and applies the appropriate workspace profile with recommended extensions.
