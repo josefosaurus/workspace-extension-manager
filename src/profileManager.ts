@@ -102,31 +102,48 @@ export class ProfileManager {
             return true;
         });
 
-        console.log(`🚫 Disabling ${toDisable.length} non-profile extensions...`);
-        let disableCommandId: string | null = null;
+        if (toDisable.length === 0) {
+            console.log('✅ No non-profile extensions to disable.');
+            return;
+        }
 
-        // Discover which disable command VS Code has registered in this version
+        console.log(`🚫 Disabling ${toDisable.length} non-profile extensions...`);
+
+        // Try each candidate command directly rather than pre-checking with
+        // getCommands(), because internal workbench commands may not appear in
+        // that list even though they are available.
         const candidates = [
             'workbench.extensions.disableExtension',
             'workbench.extensions.action.disableExtension',
         ];
-        const available = await vscode.commands.getCommands(true);
+
+        let disableCommandId: string | null = null;
+
+        // Probe with the first extension to find a working command
+        const probe = toDisable[0];
         for (const cmd of candidates) {
-            if (available.includes(cmd)) {
+            try {
+                await vscode.commands.executeCommand(cmd, probe.id);
                 disableCommandId = cmd;
+                console.log(`  ⊘ Disabled ${probe.id} (using ${cmd})`);
                 break;
+            } catch {
+                // This candidate command is not available, try next
             }
         }
 
         if (!disableCommandId) {
-            console.warn('⚠️ No extension-disable command found in this VS Code version. Skipping disable step.');
+            console.warn('⚠️ No extension-disable command available in this VS Code version.');
             vscode.window.showWarningMessage(
-                'Could not disable non-profile extensions: VS Code does not expose a disable command in this version.'
+                'Could not disable non-profile extensions: no supported disable command was found. ' +
+                'Please update VS Code to the latest version or disable unneeded extensions manually.'
             );
             return;
         }
 
-        for (const ext of toDisable) {
+        // Disable the remaining extensions using the command that worked
+        for (let i = 1; i < toDisable.length; i++) {
+            const ext = toDisable[i];
             try {
                 console.log(`  ⊘ Disabling ${ext.id}`);
                 await vscode.commands.executeCommand(disableCommandId, ext.id);
